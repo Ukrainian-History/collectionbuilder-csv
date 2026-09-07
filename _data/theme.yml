@@ -58,6 +58,8 @@ map-search: true # not suggested with large collections
 map-search-fuzziness: 0.35 # fuzzy search range from 1 = anything to 0 = exact match only
 map-cluster: true # suggested for large collection or with many items in same location
 map-cluster-radius: 25 # size of clusters, from ~ 10 to 80
+map-rotate: false # enable tile rotation and compass control, https://github.com/Raruto/leaflet-rotate
+map-rotate-bearing: 0 # initial map bearing in degrees, 0 = north up (only used if map-rotate is true)
 
 ##########
 # TIMELINE PAGE

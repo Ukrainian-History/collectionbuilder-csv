@@ -8,6 +8,7 @@
 <!-- load leaflet dependencies -->
 <script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/leaflet.js"></script>
 <script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/Leaflet.fullscreen.min.js"></script>
+{% if site.data.theme.map-rotate == true %}<script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/leaflet-rotate.js"></script>{% endif %}
 {% if site.data.theme.map-search == true %}<script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/fuse.min.js"></script>
 <script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/leaflet.fusesearch.js"></script>{% endif %}
 {% if site.data.theme.map-cluster == true %}<script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/leaflet.markercluster.js"></script>{% endif %}
@@ -39,7 +40,12 @@
     var markerFilter = url.searchParams.get('marker') ? url.searchParams.get('marker') : "";
 
     /* init map */
-    var map = L.map('mapContainer');
+    var map = L.map('mapContainer'{% if site.data.theme.map-rotate == true %}, {
+        rotate: true,
+        bearing: {{ site.data.theme.map-rotate-bearing | default: 0 }},
+        rotateControl: { closeOnZeroBearing: false },
+        touchRotate: true
+    }{% endif %});
 
     /* add map layer options */
     var Esri_WorldStreetMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
