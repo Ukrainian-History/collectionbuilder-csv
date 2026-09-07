@@ -163,6 +163,9 @@
     if (locationSearchParams === null) {
         const featureBounds = mapFeatures.getBounds()
         if (featureBounds?.isValid()) {
+            {% if site.data.theme.map-rotate == true %}/* initialize map view first so fitBounds works with a rotated map */
+            map.setView(mapCenter, mapZoom, { animate: false });
+            {% endif %}
             map.fitBounds(featureBounds);
         }
     } else {
