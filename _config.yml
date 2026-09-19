@@ -73,7 +73,15 @@ organization-logo-nav: https://www.lib.uidaho.edu/collectionbuilder/cdil-white.p
 # provide a relative path in this repository or full url 
 lib-assets: /assets/lib
 # ignore stuff
-exclude: [docs/, Rakefile, rakelib/, README.md, LICENSE, CITATION.cff, CODE_OF_CONDUCT.md, CONTRIBUTING.md, SECURITY.md, AGENTS.md, CLAUDE.md, HUMANS.md]
+exclude: [docs/, Rakefile, rakelib/, README.md, LICENSE, CITATION.cff, CODE_OF_CONDUCT.md, CONTRIBUTING.md, SECURITY.md, AGENTS.md, CLAUDE.md, HUMANS.md, utilities/render_tiles.py]
+#
+# CUSTOM CRS MAP TILES [advanced, optional!]
+# Only relevant if _data/theme.yml map-custom-crs is true and the tiles are stored in this project.
+# A tile set can easily be tens of thousands of small files, which Jekyll will copy on every rebuild.
+# To keep builds fast: add the tiles directory (e.g. "objects/tiles/") to the exclude list above,
+# uncomment keep_files below so Jekyll will not delete it from _site, and run
+# `bundle exec rake sync_tiles` once to copy the tiles into _site. See docs/maps.md.
+# keep_files: [objects/tiles]
 # compress CSS output
 sass:
   style: compressed

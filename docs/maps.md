@@ -74,3 +74,77 @@ There is three parts to add a new one:
 
 Keep in mind that some of the base maps in the free [Leaflet Providers Preview](https://leaflet-extras.github.io/leaflet-providers/preview/) may have usage limitations--check the [Leaflet Providers readme for notes](https://github.com/leaflet-extras/leaflet-providers).
 If you want to do more customization, check the [Leaflet docs](https://leafletjs.com/reference.html), and [Leaflet basemap providers plugins](https://leafletjs.com/plugins.html#basemap-providers).
+
+## Custom CRS Tiles (advanced)
+
+The map can display a locally generated tile set drawn in a **custom projection** instead of the standard Web Mercator base maps.
+The main use case is a rotated CRS, where "north is not up"--for example, aligning the map to a site grid, a historic plan, or an excavation grid.
+Item markers are still placed using the normal `latitude` / `longitude` metadata columns; they are reprojected into the custom CRS by [proj4js](https://github.com/proj4js/proj4js) and [Proj4Leaflet](https://github.com/kartena/Proj4Leaflet) at runtime, so no metadata changes are needed.
+
+> **The web mercator base maps are not available in this mode.** Leaflet's CRS is fixed when the map is created, and the Esri / OpenStreetMap XYZ tiles only exist in Web Mercator. When `map-custom-crs` is true, those layers and the base map switcher are not added to the map, and `map-base` is ignored.
+
+### theme.yml options
+
+```
+map-custom-crs: false # true / false - use the custom CRS tile set instead of the web mercator base maps
+map-custom-crs-scheme: tiles-scheme # filename of the tile scheme json in _data/ (no .json extension)
+map-custom-crs-tiles: /objects/tiles/{z}/{x}/{y}.png # tile url template, either a path in this project or a full external url
+map-custom-crs-attribution: # attribution for the custom tiles, e.g. "Created using QGIS"
+map-custom-crs-min-zoom: 2 # lowest zoom level to allow (tiles at very low zooms are tiny)
+```
+
+If `map-custom-crs-tiles` contains `://` it is used as-is (tiles hosted elsewhere), otherwise it is treated as a path within this project.
+If `map-custom-crs` is true but the scheme file is missing or incomplete, the map falls back to the standard base maps and an HTML comment noting the problem is written into the page source.
+
+### The tile scheme file
+
+Copy the `tiles_scheme.json` written by the tile renderer into `_data/` (e.g. `_data/tiles-scheme.json`) and point `map-custom-crs-scheme` at it.
+Jekyll reads JSON in `_data/`, so the values are written directly into the map javascript at build time--there is no extra request from the browser.
+
+| Key | Meaning |
+|---|---|
+| `proj4` | proj4 string of the tile CRS |
+| `origin` | CRS coordinates of the top left corner of tile `(0,0)` |
+| `resolutions` | CRS units per pixel for each zoom level (array index = zoom) |
+| `bounds` | `[xmin, ymin, xmax, ymax]` of the tiled extent, in CRS units |
+| `zmax` | deepest zoom level |
+| `tile_size` | tile size in pixels (256) |
+
+The view is constrained to the tiled extent: the map sets `maxBounds` from the projected corners of `bounds`, and zoom is clamped between `map-custom-crs-min-zoom` and `zmax`.
+With `auto-center-map: true`, the map still fits to the collection items, but falls back to fitting the whole tile set if the items fall outside the tiled area.
+
+### Generating tiles
+
+Use `utilities/render_tiles.py` in the QGIS Python console (`Plugins > Python Console`):
+
+```python
+exec(open('/path/to/utilities/render_tiles.py').read())
+```
+
+QGIS's built in "Generate XYZ tiles" tool always renders into EPSG:3857 and discards any custom CRS rotation, which is why this script exists.
+It renders each tile directly in the project CRS, so scale dependent visibility works per zoom level and labels stay upright even when the grid is rotated.
+Set `TEST_ONLY = True` first to write a single `test_render.png` to check orientation and content, then set it to `False` for the full run.
+
+For a rotated grid, define a custom CRS in QGIS (**Settings > Custom Projections**) along these lines and set it as the project CRS:
+
+```
++proj=omerc +lat_0=40.5462477 +lonc=-74.5215446 +alpha=0 +gamma=142 +k=1 +x_0=0 +y_0=0 +no_uoff +ellps=WGS84 +units=m +no_defs
+```
+
+`+gamma` is the rotation of grid north from true north.
+**Use `+lonc`, never `+lon_0`**: PROJ ignores `+lon_0` for `omerc` and silently falls back to the Greenwich meridian, which collapses the map into a tiny blob.
+
+### Hosting the tiles
+
+A tile set is often tens of thousands of small files, which Jekyll will copy into `_site` on every rebuild.
+
+- **External hosting (recommended for GitHub Pages):** upload the tiles to a CDN, object store, or separate repository and put the full url in `map-custom-crs-tiles`. Nothing else is needed.
+- **In this project:** put the tiles in e.g. `objects/tiles/`, then add that directory to the `exclude` list in `_config.yml`, uncomment the `keep_files` line there, and run `bundle exec rake sync_tiles` once after building. Jekyll will then leave the tiles alone on later builds.
+
+### Troubleshooting
+
+- **Blank map or tiny content** -- the CRS string uses `+lon_0` instead of `+lonc`, or the rendered extent covered far more than the site.
+- **Markers in the wrong place** -- check that `proj4` in the scheme file matches the CRS the tiles were rendered in.
+- **Browser crash or error on zoom** -- the map sets `crs._projectedBounds`, which is required whenever a Proj4Leaflet CRS has `bounds`; do not remove it.
+- **proj4 returns NaN** -- `assets/lib/leaflet/proj4.js` must be version 2.14 or later, since earlier versions silently drop `+gamma`.
+- **Map orientation is wrong or mirrored** -- verify the rotation in QGIS first; the browser just follows the CRS definition in the scheme file.

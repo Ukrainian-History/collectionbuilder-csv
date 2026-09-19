@@ -5,8 +5,36 @@
 {% endif %}
 {%- assign items = items | where_exp: 'item','item.latitude != nil and item.longitude != nil' -%}
 {%- assign fields = site.data.config-map -%}
+{%- comment -%}
+    Optional custom CRS mode.
+    If theme.yml map-custom-crs is true, look up the tile scheme json in _data/ (written by the tile renderer,
+    see docs/maps.md). If the scheme is missing or incomplete, map_crs stays false and the map falls back to
+    the standard web mercator base maps rather than emitting broken js.
+{%- endcomment -%}
+{%- assign map_crs = false -%}
+{%- if site.data.theme.map-custom-crs == true -%}
+    {%- assign crs_scheme_key = site.data.theme.map-custom-crs-scheme | default: 'tiles-scheme' -%}
+    {%- assign crs_scheme = site.data[crs_scheme_key] -%}
+    {%- if crs_scheme.proj4 and crs_scheme.origin and crs_scheme.resolutions and crs_scheme.bounds -%}
+        {%- assign map_crs = crs_scheme -%}
+        {%- assign crs_last_level = crs_scheme.resolutions | size | minus: 1 -%}
+        {%- assign crs_max_zoom = crs_scheme.zmax | default: crs_last_level -%}
+        {%- assign crs_min_zoom = site.data.theme.map-custom-crs-min-zoom | default: 0 -%}
+        {%- assign crs_tiles_url = site.data.theme.map-custom-crs-tiles -%}
+        {%- comment -%} local tile paths get the baseurl prefix. relative_url escapes the {z}/{x}/{y} placeholders, so put them back. {%- endcomment -%}
+        {%- unless crs_tiles_url contains '://' -%}
+            {%- assign crs_tiles_url = crs_tiles_url | relative_url | replace: '%7B', '{' | replace: '%7D', '}' -%}
+        {%- endunless -%}
+    {%- endif -%}
+{%- endif -%}
+{%- if site.data.theme.map-custom-crs == true and map_crs == false -%}
+<!-- WARNING: map-custom-crs is true, but _data/{{ crs_scheme_key }}.json is missing or incomplete. Falling back to the standard base maps. -->
+{%- endif -%}
 <!-- load leaflet dependencies -->
 <script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/leaflet.js"></script>
+{% if map_crs %}<!-- custom CRS support, only loaded when theme map-custom-crs is enabled -->
+<script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/proj4.js"></script>
+<script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/proj4leaflet.js"></script>{% endif %}
 <script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/Leaflet.fullscreen.min.js"></script>
 {% if site.data.theme.map-search == true %}<script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/fuse.min.js"></script>
 <script src="{{ site.lib-assets | default: '/assets/lib' | relative_url }}/leaflet/leaflet.fusesearch.js"></script>{% endif %}
@@ -34,11 +62,61 @@
     /* check for url parameters and setup initial view options */ 
     let url = new URL(window.location);
     const locationSearchParams = url.searchParams.get('location');
-    var mapCenter = locationSearchParams ? locationSearchParams.split(',') : [{{ site.data.theme.latitude | default: 46.727485 }}, {{ site.data.theme.longitude | default: -117.014185 }}];
+    var mapCenter = locationSearchParams ? locationSearchParams.split(',').map(Number) : [{{ site.data.theme.latitude | default: 46.727485 }}, {{ site.data.theme.longitude | default: -117.014185 }}];
     var mapZoom = locationSearchParams ? 16 : {{ site.data.theme.zoom-level | default: 5 }};
     var markerFilter = url.searchParams.get('marker') ? url.searchParams.get('marker') : "";
 
     /* init map */
+    {% if map_crs %}
+    /* custom CRS mode, see docs/maps.md
+       tiles are pre-rendered in the projection below (which may be rotated, so north is not up),
+       so the web mercator base maps can not be used on this map */
+    var crsProj4 = {{ map_crs.proj4 | jsonify }};
+    var crsMinZoom = {{ crs_min_zoom }};
+    var crsMaxZoom = {{ crs_max_zoom }};
+    var crsProjectedBounds = L.bounds(
+        [{{ map_crs.bounds[0] }}, {{ map_crs.bounds[1] }}],
+        [{{ map_crs.bounds[2] }}, {{ map_crs.bounds[3] }}]
+    );
+    proj4.defs('CB:CUSTOM', crsProj4);
+    var customCRS = new L.Proj.CRS('CB:CUSTOM', crsProj4, {
+        origin: {{ map_crs.origin | jsonify }},
+        resolutions: {{ map_crs.resolutions | jsonify }},
+        bounds: crsProjectedBounds
+    });
+    /* required when the CRS has bounds: leaflet's drag handler calls getPixelWorldBounds().getSize() on zoom */
+    customCRS._projectedBounds = crsProjectedBounds;
+
+    /* lat lng extent of the tiled area, from the four projected corners */
+    var crsInverse = proj4(crsProj4);
+    var crsLatLngBounds = L.latLngBounds([
+        [{{ map_crs.bounds[0] }}, {{ map_crs.bounds[1] }}],
+        [{{ map_crs.bounds[2] }}, {{ map_crs.bounds[1] }}],
+        [{{ map_crs.bounds[2] }}, {{ map_crs.bounds[3] }}],
+        [{{ map_crs.bounds[0] }}, {{ map_crs.bounds[3] }}]
+    ].map(function(corner) {
+        var lnglat = crsInverse.inverse(corner);
+        return L.latLng(lnglat[1], lnglat[0]);
+    }));
+
+    var map = L.map('mapContainer', {
+        crs: customCRS,
+        minZoom: crsMinZoom,
+        maxZoom: crsMaxZoom,
+        maxBoundsViscosity: 1.0
+    });
+    map.setMaxBounds(crsLatLngBounds);
+
+    /* add the custom CRS tile layer */
+    L.tileLayer({{ crs_tiles_url | jsonify }}, {
+        tms: false,
+        noWrap: true,
+        minZoom: crsMinZoom,
+        maxZoom: crsMaxZoom,
+        bounds: crsLatLngBounds,
+        attribution: {{ site.data.theme.map-custom-crs-attribution | default: '' | jsonify }}
+    }).addTo(map);
+    {% else %}
     var map = L.map('mapContainer');
 
     /* add map layer options */
@@ -66,6 +144,7 @@
     L.control.layers(baseMaps).addTo(map);
     /* load base map */
     {{ site.data.theme.map-base | default: 'Esri_WorldStreetMap' }}.addTo(map);
+    {% endif %}
 
     {% if site.data.theme.map-search == true %}
     /* add search, https://github.com/naomap/leaflet-fusesearch */
@@ -152,7 +231,35 @@
     }){% if site.data.theme.map-cluster != true %}.addTo(map);{% else %};
     map.addLayer(markers);{% endif %}
 
+    {% if map_crs %}
+    /* custom CRS: keep the view inside the tiled extent and the zoom inside the tile pyramid */
+    function setCustomCRSView(center, zoom) {
+        if (crsLatLngBounds.contains(center)) {
+            map.setView(center, Math.min(Math.max(zoom, crsMinZoom), crsMaxZoom));
+        } else {
+            /* requested center is outside the tiled area, show the whole tile set instead */
+            map.fitBounds(crsLatLngBounds);
+        }
+    }
+    if (locationSearchParams !== null) {
+        /* set map view based on URL parameters */
+        setCustomCRSView(mapCenter, mapZoom);
     {% if site.data.theme.auto-center-map == true %}
+    } else {
+        /* auto center on the collection items, as long as they fall within the tiled area */
+        const featureBounds = mapFeatures.getBounds();
+        if (featureBounds?.isValid() && crsLatLngBounds.intersects(featureBounds)) {
+            map.fitBounds(featureBounds);
+        } else {
+            map.fitBounds(crsLatLngBounds);
+        }
+    }
+    {% else %}
+    } else {
+        setCustomCRSView(mapCenter, mapZoom);
+    }
+    {% endif %}
+    {% elsif site.data.theme.auto-center-map == true %}
     /* if no location was specified in the URL query parameters, auto center the map */
     if (locationSearchParams === null) {
         const featureBounds = mapFeatures.getBounds()
