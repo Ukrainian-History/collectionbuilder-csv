@@ -63,8 +63,8 @@ map-cluster-radius: 25 # size of clusters, from ~ 10 to 80
 # Display a locally generated tile set in a custom projection (e.g. a rotated, "north is not up" CRS).
 # See docs/maps.md for how to generate tiles and the scheme file.
 # NOTE: when map-custom-crs is true the Esri / OpenStreetMap base maps above are NOT available
-# (web mercator tiles can not be drawn in a custom CRS), so map-base is ignored.
-map-custom-crs: false # true / false - use the custom CRS tile set instead of the web mercator base maps
+# (Web Mercator tiles cannot be drawn in a custom CRS), so map-base is ignored.
+map-custom-crs: false # true / false - use the custom CRS tile set instead of the Web Mercator base maps
 map-custom-crs-scheme: tiles-scheme # filename of the tile scheme json in _data/ (no .json extension)
 map-custom-crs-tiles: /objects/tiles/{z}/{x}/{y}.png # tile url template, either a path in this project or a full external url
 map-custom-crs-attribution: # attribution for the custom tiles, e.g. "Created by QGIS"
