@@ -89,9 +89,10 @@
 
     /* lat lng extent of the tiled area, from the four projected corners.
        this axis aligned AABB is fine for contains / intersects / fitBounds, but NOT as the pan limit:
-       Leaflet's maxBounds projects only getNorthEast() and getSouthWest() and axis aligns them,
-       which under a rotated CRS lands well inside the real tile rectangle (too narrow to pan across).
-       crsMaxBounds overrides those two getters so Leaflet sees the actual projected corners. */
+       Leaflet derives maxBounds corners by projecting getNorthEast()/getSouthWest() (pan and zoom snap)
+       or getNorthWest()/getSouthEast() (drag), so under a rotated CRS a stored lat lng box lands well
+       inside the real tile rectangle (too narrow to pan across, and broken dragging).
+       crsMaxBounds overrides all four corner getters so Leaflet always sees the projected tile corners. */
     var crsInverse = proj4(crsProj4);
     var crsLatLngBounds = L.latLngBounds([
         [{{ map_crs.bounds[0] }}, {{ map_crs.bounds[1] }}],
@@ -106,8 +107,14 @@
     crsMaxBounds.getNorthEast = function() {
         return customCRS.projection.unproject(crsProjectedBounds.max);
     };
+    crsMaxBounds.getNorthWest = function() {
+        return customCRS.projection.unproject(L.point(crsProjectedBounds.min.x, crsProjectedBounds.max.y));
+    };
     crsMaxBounds.getSouthWest = function() {
         return customCRS.projection.unproject(crsProjectedBounds.min);
+    };
+    crsMaxBounds.getSouthEast = function() {
+        return customCRS.projection.unproject(L.point(crsProjectedBounds.max.x, crsProjectedBounds.min.y));
     };
 
     var map = L.map('mapContainer', {

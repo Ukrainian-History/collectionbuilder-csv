@@ -145,7 +145,7 @@ A tile set is often tens of thousands of small files, which Jekyll will copy int
 
 - **Blank map or tiny content** -- the CRS string uses `+lon_0` instead of `+lonc`, or the rendered extent covered far more than the site.
 - **Markers in the wrong place** -- check that `proj4` in the scheme file matches the CRS the tiles were rendered in.
-- **Cannot pan to the whole map (view pinched in one direction)** -- an axis aligned lat lng `maxBounds` is invalid for a rotated CRS. Leaflet projects only `getNorthEast()` and `getSouthWest()` and axis aligns them, which lands inside the rotated tile rectangle. The map therefore overrides those two getters on `crsMaxBounds` so they project to the true tile corners; do not replace it with the plain lat lng AABB of the corners.
+- **Cannot pan to the whole map, or dragging throws the map off screen** -- an axis aligned lat lng `maxBounds` is invalid for a rotated CRS. Leaflet derives the corners by projecting `getNorthEast()`/`getSouthWest()` (pan and zoom snap) and `getNorthWest()`/`getSouthEast()` (drag), which land inside the rotated tile rectangle. The map therefore overrides all four corner getters on `crsMaxBounds` so they project to the true tile corners; do not replace it with the plain lat lng AABB of the corners.
 - **Browser crash or error on zoom** -- the map sets `crs._projectedBounds`, which is required whenever a Proj4Leaflet CRS has `bounds`; do not remove it.
 - **proj4 returns NaN** -- `assets/lib/leaflet/proj4.js` must be version 2.14 or later, since earlier versions silently drop `+gamma`.
 - **Map orientation is wrong or mirrored** -- verify the rotation in QGIS first; the browser just follows the CRS definition in the scheme file.
